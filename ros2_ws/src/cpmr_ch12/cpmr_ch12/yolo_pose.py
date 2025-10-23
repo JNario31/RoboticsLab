@@ -110,13 +110,37 @@ class YOLO_Pose(Node):
             left_shoulder = None
             right_shoulder = None
             if len(keypoints) > 0:
-                for i in range(len(keypoints)):
-                    self.get_logger().info(f'{self.get_name()}  {YOLO_Pose._BODY_PARTS[keypoints[i][0]]} {keypoints[i]}')
+                #for i in range(len(keypoints)):
+                 #   self.get_logger().info(f'{self.get_name()}  {YOLO_Pose._BODY_PARTS[keypoints[i][0]]} {keypoints[i]}')
 
                 # Visualize results on frame        
                 annotated_frame = results[0].plot()
                 cv2.imshow('Results', annotated_frame)
                 cv2.waitKey(1)
+        
+        key_dict = {YOLO_Pose._BODY_PARTS[kp[0]]: kp for kp in keypoints}
+
+        required = ["LEFT_EYE", "RIGHT_EYE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_WRIST", "RIGHT_WRIST"]
+        if not all(k in key_dict for k in required):
+            return
+
+        left_eye_y = key_dict["LEFT_EYE"][2]
+        right_eye_y = key_dict["RIGHT_EYE"][2]
+        left_shoulder_y = key_dict["LEFT_SHOULDER"][2]
+        right_shoulder_y = key_dict["RIGHT_SHOULDER"][2]
+        left_wrist_y = key_dict["LEFT_WRIST"][2]
+        right_wrist_y = key_dict["RIGHT_WRIST"][2]
+
+        dy_ref = abs((left_eye_y + right_eye_y)/2 - (left_shoulder_y + right_shoulder_y)/2)
+
+        left_above = left_wrist_y < (left_shoulder_y - dy_ref)
+        left_below = left_wrist_y > (left_shoulder_y + dy_ref)
+        right_above = right_wrist_y < (right_shoulder_y - dy_ref)
+        right_below = right_wrist_y > (right_shoulder_y + dy_ref)
+
+        self.get_logger().info(f'{self.get_name()}  Left Above: {left_above}, Left Below: {left_below}, Right Above: {right_above}, Right Below: {right_below}')
+
+
 
     def call_home(self):
         """Call home by moving to a specific Cartesian position"""
