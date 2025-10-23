@@ -132,36 +132,34 @@ class YOLO_Pose(Node):
 
             self.get_logger().info(f'{self.get_name()}  Left Above: {left_above}, Left Below: {left_below}, Right Above: {right_above}, Right Below: {right_below}')
 
-            self.call_home()
             if not self._moving:
                 if left_above and right_above:
-                    self.get_logger().info('BOTH HANDS ABOVE - Moving to home position')
+                    self.get_logger().info('BOTH HANDS ABOVE - Moving to position 1')
                     self._moving = True
                     self.call_home()
                     self.call_set_tool_async(0.0, 0.2, 0.1, 180.0, 0.0, 180.0)
                 elif left_above:
-                    self.get_logger().info('LEFT HAND ABOVE - Moving to position 1')
+                    self.get_logger().info('LEFT HAND ABOVE - Moving to position 2')
                     self._moving = True
                     self.call_set_tool_async(0.1, 0.2, 0.1, 180.0, 0.0, 180.0)
                     
                 elif left_below:
-                    self.get_logger().info('LEFT HAND BELOW - Moving to position 2')
+                    self.get_logger().info('LEFT HAND BELOW - Moving to position 3')
                     self._moving = True
                     self.call_set_tool_async(-0.1, 0.2, 0.1, 180.0, 0.0, 180.0)
                     
                 elif right_above:
-                    self.get_logger().info('RIGHT HAND ABOVE - Moving to position 3')
+                    self.get_logger().info('RIGHT HAND ABOVE - Moving to position 4')
                     self._moving = True
                     self.call_set_tool_async(0.0, 0.1, 0.1, 180.0, 0.0, 180.0)
                     
                 elif right_below:
-                    self.get_logger().info('RIGHT HAND BELOW - Moving to position 4')
+                    self.get_logger().info('RIGHT HAND BELOW - Moving to position 5')
                     self._moving = True
                     self.call_set_tool_async(0.0, 0.3, 0.1, 180.0, 0.0, 180.0)
                 
                 else:
                     self.get_logger().info('NO HANDS DETECTED - No movement command')
-                    self._moving = False
 
     def call_home(self):
         """Call home by moving to a specific Cartesian position"""
