@@ -20,13 +20,6 @@ from ament_index_python.packages import get_package_share_directory
 
 from kinova_gen3_interfaces.srv import Status, SetGripper, GetGripper, SetJoints, GetJoints, GetTool, SetTool
 
-# REMOVE THESE IMPORTS - You don't need them anymore
-# from kortex_api.autogen.client_stubs.BaseClientRpc import BaseClient
-# from kortex_api.autogen.client_stubs.BaseCyclicClientRpc import BaseCyclicClient
-# from kortex_api.autogen.messages import Base_pb2, BaseCyclic_pb2, Common_pb2
-# from cpmr_ch12.utilities import parseConnectionArguments, DeviceConnection
-# from kinova_gen3_node import Kinova_Gen3_Interface
-
 class YOLO_Pose(Node):
     _BODY_PARTS = ["NOSE", "LEFT_EYE", "RIGHT_EYE", "LEFT_EAR", "RIGHT_EAR", "LEFT_SHOULDER", "RIGHT_SHOULDER",
                    "LEFT_ELBOW", "RIGHT_ELBOW", "LEFT_WRIST", "RIGHT_WRIST", "LEFT_HIP", "RIGHT_HIP", "LEFT_KNEE",
@@ -34,7 +27,9 @@ class YOLO_Pose(Node):
     
     def __init__(self):
         super().__init__('pose_node')
-        self._i=1
+        self._i = 1
+        self._moving = False  # Flag to prevent multiple concurrent movements
+        
         # params
         self._model_file = os.path.join(get_package_share_directory('cpmr_ch12'), 'yolov8n-pose.pt') 
         self.declare_parameter("model", self._model_file) 
@@ -110,39 +105,38 @@ class YOLO_Pose(Node):
             left_shoulder = None
             right_shoulder = None
             if len(keypoints) > 0:
-                #for i in range(len(keypoints)):
-                 #   self.get_logger().info(f'{self.get_name()}  {YOLO_Pose._BODY_PARTS[keypoints[i][0]]} {keypoints[i]}')
-
                 # Visualize results on frame        
                 annotated_frame = results[0].plot()
                 cv2.imshow('Results', annotated_frame)
                 cv2.waitKey(1)
         
-        key_dict = {YOLO_Pose._BODY_PARTS[kp[0]]: kp for kp in keypoints}
+            key_dict = {YOLO_Pose._BODY_PARTS[kp[0]]: kp for kp in keypoints}
 
-        required = ["LEFT_EYE", "RIGHT_EYE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_WRIST", "RIGHT_WRIST"]
-        if not all(k in key_dict for k in required):
-            return
+            required = ["LEFT_EYE", "RIGHT_EYE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_WRIST", "RIGHT_WRIST"]
+            if not all(k in key_dict for k in required):
+                return
 
-        left_eye_y = key_dict["LEFT_EYE"][2]
-        right_eye_y = key_dict["RIGHT_EYE"][2]
-        left_shoulder_y = key_dict["LEFT_SHOULDER"][2]
-        right_shoulder_y = key_dict["RIGHT_SHOULDER"][2]
-        left_wrist_y = key_dict["LEFT_WRIST"][2]
-        right_wrist_y = key_dict["RIGHT_WRIST"][2]
+            left_eye_y = key_dict["LEFT_EYE"][2]
+            right_eye_y = key_dict["RIGHT_EYE"][2]
+            left_shoulder_y = key_dict["LEFT_SHOULDER"][2]
+            right_shoulder_y = key_dict["RIGHT_SHOULDER"][2]
+            left_wrist_y = key_dict["LEFT_WRIST"][2]
+            right_wrist_y = key_dict["RIGHT_WRIST"][2]
 
-        dy_ref = abs((left_eye_y + right_eye_y)/2 - (left_shoulder_y + right_shoulder_y)/2)
+            dy_ref = abs((left_eye_y + right_eye_y)/2 - (left_shoulder_y + right_shoulder_y)/2)
 
-        left_above = left_wrist_y < (left_shoulder_y - dy_ref)
-        left_below = left_wrist_y > (left_shoulder_y + dy_ref)
-        right_above = right_wrist_y < (right_shoulder_y - dy_ref)
-        right_below = right_wrist_y > (right_shoulder_y + dy_ref)
+            left_above = left_wrist_y < (left_shoulder_y - dy_ref)
+            left_below = left_wrist_y > (left_shoulder_y + dy_ref)
+            right_above = right_wrist_y < (right_shoulder_y - dy_ref)
+            right_below = right_wrist_y > (right_shoulder_y + dy_ref)
 
-        self.get_logger().info(f'{self.get_name()}  Left Above: {left_above}, Left Below: {left_below}, Right Above: {right_above}, Right Below: {right_below}')
-       
-        if self._i == 1:
-            self.call_set_tool(0.3, 0.0, 0.3, 180.0, 0.0, 90.0)  # Default position
-            self._i = 0
+            self.get_logger().info(f'{self.get_name()}  Left Above: {left_above}, Left Below: {left_below}, Right Above: {right_above}, Right Below: {right_below}')
+           
+            # Only move if not already moving
+            if self._i == 1 and not self._moving:
+                self._moving = True
+                self.call_set_tool_async(0.3, 0.0, 0.3, 180.0, 0.0, 90.0)  # Default position
+                self._i = 0
 
     def call_home(self):
         """Call home by moving to a specific Cartesian position"""
@@ -161,7 +155,7 @@ class YOLO_Pose(Node):
                                 home_theta_x, home_theta_y, home_theta_z)
 
     def call_set_tool(self, x, y, z, theta_x, theta_y, theta_z):
-        """Call the set_tool service"""
+        """Call the set_tool service (blocking - use in main, not in callbacks)"""
         request = SetTool.Request()
         request.x = float(x)
         request.y = float(y)
@@ -180,23 +174,47 @@ class YOLO_Pose(Node):
             self.get_logger().error('SetTool service call failed')
             return False
 
+    def call_set_tool_async(self, x, y, z, theta_x, theta_y, theta_z):
+        """Call the set_tool service asynchronously (safe for callbacks)"""
+        request = SetTool.Request()
+        request.x = float(x)
+        request.y = float(y)
+        request.z = float(z)
+        request.theta_x = float(theta_x)
+        request.theta_y = float(theta_y)
+        request.theta_z = float(theta_z)
+        
+        future = self._set_tool_client.call_async(request)
+        future.add_done_callback(self._set_tool_callback)
+
+    def _set_tool_callback(self, future):
+        """Callback when set_tool service completes"""
+        try:
+            result = future.result()
+            self.get_logger().info(f'SetTool completed: {result.status}')
+            self._moving = False
+        except Exception as e:
+            self.get_logger().error(f'SetTool failed: {str(e)}')
+            self._moving = False
+
 
 def main(args=None):
     rclpy.init(args=args)
     node = YOLO_Pose()
 
-    # Call home
-   # success = node.call_home()
-    #if success:
-     #   node.get_logger().info('Robot homed successfully')
-    #else:
-     #   node.get_logger().error('Failed to home robot')
+    # Call home at startup (blocking call is OK here in main)
+    # success = node.call_home()
+    # if success:
+    #     node.get_logger().info('Robot homed successfully')
+    # else:
+    #     node.get_logger().error('Failed to home robot')
 
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
         pass
     
+    cv2.destroyAllWindows()
     node.destroy_node()
     rclpy.shutdown()
 
