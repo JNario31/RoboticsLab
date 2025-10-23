@@ -132,11 +132,26 @@ class YOLO_Pose(Node):
 
             self.get_logger().info(f'{self.get_name()}  Left Above: {left_above}, Left Below: {left_below}, Right Above: {right_above}, Right Below: {right_below}')
            
-            # Only move if not already moving
-            if self._i == 1 and not self._moving:
-                self._moving = True
-                self.call_set_tool_async(0.3, 0.0, 0.3, 180.0, 0.0, 90.0)  # Default position
-                self._i = 0
+            if not self._moving:
+                if left_above:
+                    self.get_logger().info('LEFT HAND ABOVE - Moving to position 1')
+                    self._moving = True
+                    self.call_set_tool_async(0.3, 0.2, 0.2, 180.0, 0.0, 180.0)
+                    
+                elif left_below:
+                    self.get_logger().info('LEFT HAND BELOW - Moving to position 2')
+                    self._moving = True
+                    self.call_set_tool_async(0.5, 0.2, 0.0, 180.0, 0.0, 180.0)
+                    
+                elif right_above:
+                    self.get_logger().info('RIGHT HAND ABOVE - Moving to position 3')
+                    self._moving = True
+                    self.call_set_tool_async(0.3, -0.2, 0.2, 180.0, 0.0, 180.0)
+                    
+                elif right_below:
+                    self.get_logger().info('RIGHT HAND BELOW - Moving to position 4')
+                    self._moving = True
+                    self.call_set_tool_async(0.5, -0.2, 0.0, 180.0, 0.0, 180.0)
 
     def call_home(self):
         """Call home by moving to a specific Cartesian position"""
