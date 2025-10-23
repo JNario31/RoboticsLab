@@ -27,8 +27,8 @@ class YOLO_Pose(Node):
     
     def __init__(self):
         super().__init__('pose_node')
-        self._i = 1
-        self._moving = False  # Flag to prevent multiple concurrent movements
+
+        self._moving = False  # Flag to prevent concurrent arm movements
         
         # params
         self._model_file = os.path.join(get_package_share_directory('cpmr_ch12'), 'yolov8n-pose.pt') 
@@ -49,7 +49,7 @@ class YOLO_Pose(Node):
         self._model = YOLO(model)
         self._model.fuse()
 
-        # Create service clients (not services!)
+        # Service clients
         self._home_client = self.create_client(Status, "/home")
         self._set_tool_client = self.create_client(SetTool, "/set_tool")
         self._get_tool_client = self.create_client(GetTool, "/get_tool")
@@ -116,6 +116,7 @@ class YOLO_Pose(Node):
             if not all(k in key_dict for k in required):
                 return
 
+            # Extract y-coordinates from keypoints
             left_eye_y = key_dict["LEFT_EYE"][2]
             right_eye_y = key_dict["RIGHT_EYE"][2]
             left_shoulder_y = key_dict["LEFT_SHOULDER"][2]
@@ -123,8 +124,10 @@ class YOLO_Pose(Node):
             left_wrist_y = key_dict["LEFT_WRIST"][2]
             right_wrist_y = key_dict["RIGHT_WRIST"][2]
 
+            # Reference distance between eyes and shoulders
             dy_ref = abs((left_eye_y + right_eye_y)/2 - (left_shoulder_y + right_shoulder_y)/2)
 
+            # Hand positions based on wrist and shoulder y-coordinates
             left_above = left_wrist_y < (left_shoulder_y - dy_ref)
             left_below = left_wrist_y > (left_shoulder_y + dy_ref)
             right_above = right_wrist_y < (right_shoulder_y - dy_ref)
@@ -133,57 +136,45 @@ class YOLO_Pose(Node):
             self.get_logger().info(f'{self.get_name()}  Left Above: {left_above}, Left Below: {left_below}, Right Above: {right_above}, Right Below: {right_below}')
 
             if not self._moving:
+
+                # Both hands above shoulders
                 if left_above and right_above:
-                    self.get_logger().info('BOTH HANDS ABOVE - Moving to position 1')
+                    self.get_logger().info('BOTH HANDS ABOVE')
                     self._moving = True
                     self.call_set_tool_async(0.0, 0.2, 0.1, 180.0, 0.0, 180.0)
+
+                # Left hand above shoulder
                 elif left_above:
-                    self.get_logger().info('LEFT HAND ABOVE - Moving to position 2')
+                    self.get_logger().info('LEFT HAND ABOVE')
                     self._moving = True
                     self.call_set_tool_async(0.1, 0.2, 0.1, 180.0, 0.0, 180.0)
                     
+                # Right hand above shoulder
                 elif right_above:
-                    self.get_logger().info('RIGHT HAND ABOVE - Moving to position 4')
+                    self.get_logger().info('RIGHT HAND ABOVE')
                     self._moving = True
                     self.call_set_tool_async(0.0, 0.1, 0.1, 180.0, 0.0, 180.0)
   
+                # Left hand below shoulder
                 elif left_below:
-                    self.get_logger().info('LEFT HAND BELOW - Moving to position 3')
+                    self.get_logger().info('LEFT HAND BELOW ')
                     self._moving = True
                     self.call_set_tool_async(-0.1, 0.2, 0.1, 180.0, 0.0, 180.0)
                   
+                # Right hand below shoulder
                 elif right_below:
-                    self.get_logger().info('RIGHT HAND BELOW - Moving to position 5')
+                    self.get_logger().info('RIGHT HAND BELOW')
                     self._moving = True
                     self.call_set_tool_async(0.0, 0.3, 0.1, 180.0, 0.0, 180.0)
                 
+                # No hands detected
                 else:
-                    self.get_logger().info('NO HANDS DETECTED - No movement command')
+                    self.get_logger().info('NO HANDS DETECTED')
 
-
-
-    def call_set_tool(self, x, y, z, theta_x, theta_y, theta_z):
-        """Call the set_tool service (blocking - use in main, not in callbacks)"""
-        request = SetTool.Request()
-        request.x = float(x)
-        request.y = float(y)
-        request.z = float(z)
-        request.theta_x = float(theta_x)
-        request.theta_y = float(theta_y)
-        request.theta_z = float(theta_z)
-        
-        future = self._set_tool_client.call_async(request)
-        rclpy.spin_until_future_complete(self, future)
-        
-        if future.result() is not None:
-            self.get_logger().info(f'SetTool returned: {future.result().status}')
-            return future.result().status
-        else:
-            self.get_logger().error('SetTool service call failed')
-            return False
 
     def call_set_tool_async(self, x, y, z, theta_x, theta_y, theta_z):
-        """Call the set_tool service asynchronously (safe for callbacks)"""
+        
+        # Service message
         request = SetTool.Request()
         request.x = float(x)
         request.y = float(y)
@@ -192,11 +183,15 @@ class YOLO_Pose(Node):
         request.theta_y = float(theta_y)
         request.theta_z = float(theta_z)
         
+        # Send service call
         future = self._set_tool_client.call_async(request)
+
+        # Wait for the service call to complete
         future.add_done_callback(self._set_tool_callback)
 
     def _set_tool_callback(self, future):
-        """Callback when set_tool service completes"""
+        
+        # After movement is complete, reset moving flag
         try:
             result = future.result()
             self.get_logger().info(f'SetTool completed: {result.status}')
