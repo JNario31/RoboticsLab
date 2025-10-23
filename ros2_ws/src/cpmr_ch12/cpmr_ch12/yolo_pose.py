@@ -1,5 +1,6 @@
 import os
 import sys
+from tokenize import String
 import rclpy
 import cv2
 import datetime
@@ -53,6 +54,9 @@ class YOLO_Pose(Node):
         self._bridge = CvBridge()
         self._model = YOLO(model)
         self._model.fuse()
+
+        # publisher
+        self._keypoint_pub = self.create_publisher(bool, '/pose_keypoints', 10)
 
         # subs
         self._sub = self.create_subscription(Image, self._camera_topic, self._camera_callback, 1) 
@@ -125,6 +129,8 @@ class YOLO_Pose(Node):
         right_below = right_wrist_y > (right_shoulder_y + dy_ref)
 
         self.get_logger().info(f'{left_above} {left_below} {right_above} {right_below}')
+        keypointArray = [left_above, left_below, right_above, right_below]
+        self._keypoint_pub.publish(keypointArray)
 
 def main(args=None):
     rclpy.init(args=args)

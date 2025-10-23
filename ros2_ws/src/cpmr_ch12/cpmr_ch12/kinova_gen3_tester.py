@@ -2,6 +2,7 @@ from kinova_gen3_interfaces.srv import Status, SetGripper, GetGripper, SetJoints
 import rclpy
 from rclpy.node import Node
 import time
+from std_msgs.msg import Bool
 
 
 def do_home(node, home):
@@ -65,10 +66,27 @@ def do_set_joints(node, set_joints, v):
     print(f"SetJoints returns {future.result()}")
     return future.result().status
 
+def movement(node, set_tool, left_above, right_above, right_below, left_below):
 
-def movement(node, set_tool, keypoint):
-
-    if keypoint == 1:
+    if left_above:
+        x = 0.3
+        y = 0.2
+        z = 0.2
+    elif right_above:
+        x = 0.3
+        y = -0.2
+        z = 0.2
+    elif right_below:
+        x = 0.5
+        y = -0.2
+        z = 0.0
+    elif left_below:
+        x = 0.5
+        y = 0.2
+        z = 0.0
+    else:
+        return False
+    
 
     # Move arm
     do_set_tool(node, set_tool, x, y, z, 180.0, 0.0, 180.0)  # Move above block
@@ -76,39 +94,67 @@ def movement(node, set_tool, keypoint):
 
     return True
 
+class RobotController(Node):
+    def __init__(self):
+        super().__init__('robot_controller')
+        
+        # Create service clients
+        self.get_tool = self.create_client(GetTool, "/get_tool")
+        while not self.get_tool.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for get_tool')
+
+        self.set_tool = self.create_client(SetTool, "/set_tool")
+        while not self.set_tool.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for set_tool')
+
+        self.get_joints = self.create_client(GetJoints, "/get_joints")
+        while not self.get_joints.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for get_joints')
+
+        self.set_joints = self.create_client(SetJoints, "/set_joints")
+        while not self.set_joints.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for set_joints')
+
+        self.set_gripper = self.create_client(SetGripper, "/set_gripper")
+        while not self.set_gripper.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for set_gripper')
+
+        self.get_gripper = self.create_client(GetGripper, "/get_gripper")
+        while not self.get_gripper.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for get_gripper')
+
+        self.home = self.create_client(Status, "/home")
+        while not self.home.wait_for_service(timeout_sec=1.0):
+            self.get_logger().info('Waiting for home')
+
+        # Create subscription
+        self.subscription = self.create_subscription(
+            Bool,  # Adjust message type based on your actual topic
+            '/pose_keypoints',
+            self.pose_callback,
+            10)
+
+def pose_callback(self, msg):
+        left_above = msg.data[0] if hasattr(msg, 'data') and len(msg.data) > 0 else False
+        left_below = msg.data[1] if hasattr(msg, 'data') and len(msg.data) > 1 else False
+        right_above = msg.data[2] if hasattr(msg, 'data') and len(msg.data) > 2 else False
+        right_below = msg.data[3] if hasattr(msg, 'data') and len(msg.data) > 3 else False
+        
+        movement(self, self.set_tool, left_above, right_above, right_below, left_below)
+
+
 def main():
     rclpy.init(args=None)
-    node = Node('dummy')
-
-    get_tool = node.create_client(GetTool, "/get_tool")
-    while not get_tool.wait_for_service(timeout_sec=1.0):
-        node.get_logger().info('Waiting for get_tool')
-
-    set_tool = node.create_client(SetTool, "/set_tool")
-    while not set_tool.wait_for_service(timeout_sec=1.0):
-        node.get_logger().info('Waiting for set_tool')
-
-    get_joints = node.create_client(GetJoints, "/get_joints")
-    while not get_joints.wait_for_service(timeout_sec=1.0):
-        node.get_logger().info('Waiting for get_joints')
-
-    set_joints = node.create_client(SetJoints, "/set_joints")
-    while not set_joints.wait_for_service(timeout_sec=1.0):
-        node.get_logger().info('Waiting for set_joints')
-
-    set_gripper = node.create_client(SetGripper, "/set_gripper")
-    while not set_gripper.wait_for_service(timeout_sec=1.0):
-        node.get_logger().info('Waiting for set_gripper')
-
-    get_gripper = node.create_client(GetGripper, "/get_gripper")
-    while not get_gripper.wait_for_service(timeout_sec=1.0):
-        node.get_logger().info('Waiting for get_gripper')
-
-    home = node.create_client(Status, "/home")
-    while not home.wait_for_service(timeout_sec=1.0):
-        node.get_logger().info('Waiting for home')
-
+    node = RobotController()
     
+    # Test movement
+    movement(node, node.set_tool, True, False, False, False)
+    
+    # Spin to keep the node alive and process callbacks
+    rclpy.spin(node)
+    
+    node.destroy_node()
+    rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
