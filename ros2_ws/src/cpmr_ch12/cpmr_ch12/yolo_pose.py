@@ -72,7 +72,7 @@ class YOLO_Pose(Node):
         return keypoints_list
     
     def _camera_callback(self, data):
-        self.get_logger().info(f'{self.get_name()} camera callback')
+        #self.get_logger().info(f'{self.get_name()} camera callback')
         img = self._bridge.imgmsg_to_cv2(data)
         results = self._model.predict(
                 source = img,
