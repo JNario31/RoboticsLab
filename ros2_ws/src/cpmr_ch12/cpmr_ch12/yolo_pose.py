@@ -34,7 +34,7 @@ class YOLO_Pose(Node):
     
     def __init__(self):
         super().__init__('pose_node')
-
+        self._i=1
         # params
         self._model_file = os.path.join(get_package_share_directory('cpmr_ch12'), 'yolov8n-pose.pt') 
         self.declare_parameter("model", self._model_file) 
@@ -139,8 +139,10 @@ class YOLO_Pose(Node):
         right_below = right_wrist_y > (right_shoulder_y + dy_ref)
 
         self.get_logger().info(f'{self.get_name()}  Left Above: {left_above}, Left Below: {left_below}, Right Above: {right_above}, Right Below: {right_below}')
-
-
+       
+        if self._i == 1:
+            self.call_set_tool(0.3, 0.0, 0.3, 180.0, 0.0, 90.0)  # Default position
+            self._i = 0
 
     def call_home(self):
         """Call home by moving to a specific Cartesian position"""
