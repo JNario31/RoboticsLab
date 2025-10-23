@@ -160,11 +160,11 @@ def main(args=None):
     node = YOLO_Pose()
 
     # Call home
-    success = node.call_home()
-    if success:
-        node.get_logger().info('Robot homed successfully')
-    else:
-        node.get_logger().error('Failed to home robot')
+   # success = node.call_home()
+    #if success:
+     #   node.get_logger().info('Robot homed successfully')
+    #else:
+     #   node.get_logger().error('Failed to home robot')
 
     try:
         rclpy.spin(node)
