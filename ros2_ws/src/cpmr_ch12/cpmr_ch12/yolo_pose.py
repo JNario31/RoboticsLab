@@ -73,10 +73,7 @@ class YOLO_Pose(Node):
             self._base = BaseClient(self._router)
             self._base_cyclic = BaseCyclicClient(self._router)
 
-        if example_move_to_home_position(self._base):
-           self.get_logger().info('Robot initialized successfully')
-        else:
-           self.get_logger().error('Failed to initialize robot position')
+
         
     def parse_keypoints(self, results: Results):
 
@@ -164,6 +161,8 @@ class YOLO_Pose(Node):
 def main(args=None):
     rclpy.init(args=args)
     node = YOLO_Pose()
+
+    node.call_home()
 
     try:
         rclpy.spin(node)
