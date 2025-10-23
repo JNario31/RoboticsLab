@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 import math
 import threading
-
+from std_msgs.msg import String
+import json
 from rclpy.node import Node
 from ultralytics import YOLO
 from cv_bridge import CvBridge
@@ -56,7 +57,7 @@ class YOLO_Pose(Node):
         self._model.fuse()
 
         # publisher
-        self._keypoint_pub = self.create_publisher(bool, '/pose_keypoints', 10)
+        self._keypoint_pub = self.create_publisher(String, '/pose_keypoints', 10)
 
         # subs
         self._sub = self.create_subscription(Image, self._camera_topic, self._camera_callback, 1) 
@@ -128,9 +129,21 @@ class YOLO_Pose(Node):
         right_above = right_wrist_y < (right_shoulder_y - dy_ref)
         right_below = right_wrist_y > (right_shoulder_y + dy_ref)
 
-        self.get_logger().info(f'{left_above} {left_below} {right_above} {right_below}')
-        keypointArray = [left_above, left_below, right_above, right_below]
-        self._keypoint_pub.publish(keypointArray)
+        pose_flags = {
+            "left_above": left_above,
+            "left_below": left_below,
+            "right_above": right_above,
+            "right_below": right_below
+        }
+
+        # Convert to JSON string
+        msg = String()
+        msg.data = json.dumps(pose_flags)
+
+        # Publish
+        self._keypoint_pub.publish(msg)
+        self.get_logger().info(f"Published flags: {pose_flags}")
+        
 
 def main(args=None):
     rclpy.init(args=args)

@@ -1,8 +1,10 @@
+from tokenize import String
 from kinova_gen3_interfaces.srv import Status, SetGripper, GetGripper, SetJoints, GetJoints, GetTool, SetTool
 import rclpy
 from rclpy.node import Node
 import time
 from std_msgs.msg import Bool
+import json
 
 
 def do_home(node, home):
@@ -128,19 +130,43 @@ class RobotController(Node):
             self.get_logger().info('Waiting for home')
 
         # Create subscription
-        self.subscription = self.create_subscription(
-            Bool,  # Adjust message type based on your actual topic
-            '/pose_keypoints',
-            self.pose_callback,
-            10)
-
-def pose_callback(self, msg):
-        left_above = msg.data[0] if hasattr(msg, 'data') and len(msg.data) > 0 else False
-        left_below = msg.data[1] if hasattr(msg, 'data') and len(msg.data) > 1 else False
-        right_above = msg.data[2] if hasattr(msg, 'data') and len(msg.data) > 2 else False
-        right_below = msg.data[3] if hasattr(msg, 'data') and len(msg.data) > 3 else False
+        # self.subscription = self.create_subscription(
+        #     Bool,  # Adjust message type based on your actual topic
+        #     '/pose_keypoints',
+        #     self.pose_callback,
+        #     10)
         
-        movement(self, self.set_tool, left_above, right_above, right_below, left_below)
+        self.subscription = self.create_subscription(
+            String,               # Message type from yolo_pose
+            '/pose_keypoints',    # Topic name
+            self.pose_callback,   # Callback function
+            10
+        )
+
+        def pose_callback(self, msg):
+            # Parse JSON string from yolo_pose
+            try:
+                pose_flags = json.loads(msg.data)
+                left_above = pose_flags.get('left_above', False)
+                left_below = pose_flags.get('left_below', False)
+                right_above = pose_flags.get('right_above', False)
+                right_below = pose_flags.get('right_below', False)
+
+                self.get_logger().info(
+                    f"Received flags - Left Above: {left_above}, Left Below: {left_below}, "
+                    f"Right Above: {right_above}, Right Below: {right_below}"
+                )
+
+            except Exception as e:
+                self.get_logger().error(f"Failed to parse pose flags: {e}")
+
+# def pose_callback(self, msg):
+#         left_above = msg.data[0] if hasattr(msg, 'data') and len(msg.data) > 0 else False
+#         left_below = msg.data[1] if hasattr(msg, 'data') and len(msg.data) > 1 else False
+#         right_above = msg.data[2] if hasattr(msg, 'data') and len(msg.data) > 2 else False
+#         right_below = msg.data[3] if hasattr(msg, 'data') and len(msg.data) > 3 else False
+        
+#         movement(self, self.set_tool, left_above, right_above, right_below, left_below)
 
 
 def main():
@@ -148,13 +174,21 @@ def main():
     node = RobotController()
     
     # Test movement
-    movement(node, node.set_tool, True, False, False, False)
+    # movement(node, node.set_tool, True, False, False, False)
     
-    # Spin to keep the node alive and process callbacks
-    rclpy.spin(node)
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
+
+    # # Spin to keep the node alive and process callbacks
+    # rclpy.spin(node)
     
-    node.destroy_node()
-    rclpy.shutdown()
+    # node.destroy_node()
+    # rclpy.shutdown()
 
 if __name__ == '__main__':
     main()
