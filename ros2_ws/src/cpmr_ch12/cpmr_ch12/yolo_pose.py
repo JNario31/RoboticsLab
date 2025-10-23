@@ -200,8 +200,6 @@ class YOLO_Pose(Node):
 
         # Create the Kinova Gen3 interface object
         self.create_service(Status, "home", self._handle_home)
-        self.create_service(GetGripper, "get_gripper", self._handle_get_gripper)
-        self.create_service(SetGripper, "set_gripper", self._handle_set_gripper)
         self.create_service(SetJoints, "set_joints", self._handle_set_joints)
         self.create_service(GetJoints, "get_joints", self._handle_get_joints)
         self.create_service(SetTool, "set_tool", self._handle_set_tool)
