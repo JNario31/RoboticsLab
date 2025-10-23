@@ -265,51 +265,27 @@ class YOLO_Pose(Node):
                 cv2.imshow('Results', annotated_frame)
                 cv2.waitKey(1)
 
-    # Kinova functions
-    def _handle_home(self, request, response):
-        """Move to home"""
-        self.get_logger().info(f'{self.get_name()} moving to home')
+        key_dict = {YOLO_Pose._BODY_PARTS[k[0]]: k for k in keypoints}
+         # === NEW CODE: Check if needed keypoints exist ===
+        required = ["LEFT_EYE", "RIGHT_EYE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_WRIST", "RIGHT_WRIST"]
+        if not all(k in key_dict for k in required):
+            return
 
-        response.status = example_move_to_home_position(self._base)
-        return response
+        left_eye_y = key_dict["LEFT_EYE"][2]
+        right_eye_y = key_dict["RIGHT_EYE"][2]
+        left_shoulder_y = key_dict["LEFT_SHOULDER"][2]
+        right_shoulder_y = key_dict["RIGHT_SHOULDER"][2]
+        left_wrist_y = key_dict["LEFT_WRIST"][2]
+        right_wrist_y = key_dict["RIGHT_WRIST"][2]
 
-    def _handle_set_joints(self, request, response):
-        """Set joint values"""
-        self.get_logger().info(f'{self.get_name()} Setting joint values')
-        if len(request.joints) != 6:
-            self.get_logger().info(f'{self.get_name()} Must specify exactly six joint angles')
-            response.status = False
-            return response
+        dy_ref = abs((left_eye_y + right_eye_y)/2 - (left_shoulder_y + right_shoulder_y)/2)
 
-        response.status = example_angular_action_movement(self._base, angles=request.joints)
-        return response
-    
-    def _handle_get_joints(self, request, response):
-        """Get joint values"""
-        self.get_logger().info(f'{self.get_name()} Getting joint values')
-        response.joints = get_angular_state(self._base_cyclic)
-        return response
+        left_above = left_wrist_y < (left_shoulder_y - dy_ref)
+        left_below = left_wrist_y > (left_shoulder_y + dy_ref)
+        right_above = right_wrist_y < (right_shoulder_y - dy_ref)
+        right_below = right_wrist_y > (right_shoulder_y + dy_ref)
 
-
-    def _handle_set_tool(self, request, response):
-        """Set tool values"""
-        self.get_logger().info(f'{self.get_name()} Setting tool values')
-
-        response.status = example_cartesian_action_movement(self._base, request.x, request.y, request.z, request.theta_x, request.theta_y, request.theta_z)
-        return response
-
-    def _handle_get_tool(self, request, response):
-        """Get tool values"""
-        self.get_logger().info(f'{self.get_name()} Getting tool values')
-        x, y, z, theta_x, theta_y, theta_z = get_tool_state(self._base_cyclic)
-        response.x = x
-        response.y = y
-        response.z = z
-        response.theta_x = theta_x
-        response.theta_y = theta_y
-        response.theta_z = theta_z
-        return response
-
+        self.get_logger().info(f'{left_above} {left_below} {right_above} {right_below}')
 
 def main(args=None):
     rclpy.init(args=args)
