@@ -136,7 +136,6 @@ class YOLO_Pose(Node):
                 if left_above and right_above:
                     self.get_logger().info('BOTH HANDS ABOVE - Moving to position 1')
                     self._moving = True
-                    self.call_home()
                     self.call_set_tool_async(0.0, 0.2, 0.1, 180.0, 0.0, 180.0)
                 elif left_above:
                     self.get_logger().info('LEFT HAND ABOVE - Moving to position 2')
@@ -161,21 +160,7 @@ class YOLO_Pose(Node):
                 else:
                     self.get_logger().info('NO HANDS DETECTED - No movement command')
 
-    def call_home(self):
-        """Call home by moving to a specific Cartesian position"""
-        self.get_logger().info('Moving to home position...')
-        
-        # Define your custom home position in Cartesian space
-        # x, y, z in meters, angles in degrees
-        home_x = 0.4
-        home_y = 0.0
-        home_z = 0.4
-        home_theta_x = 180.0
-        home_theta_y = 0.0
-        home_theta_z = 90.0
-        
-        return self.call_set_tool(home_x, home_y, home_z, 
-                                home_theta_x, home_theta_y, home_theta_z)
+
 
     def call_set_tool(self, x, y, z, theta_x, theta_y, theta_z):
         """Call the set_tool service (blocking - use in main, not in callbacks)"""
@@ -225,12 +210,6 @@ def main(args=None):
     rclpy.init(args=args)
     node = YOLO_Pose()
 
-    # Call home at startup (blocking call is OK here in main)
-    # success = node.call_home()
-    # if success:
-    #     node.get_logger().info('Robot homed successfully')
-    # else:
-    #     node.get_logger().error('Failed to home robot')
 
     try:
         rclpy.spin(node)
