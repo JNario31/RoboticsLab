@@ -137,22 +137,22 @@ class YOLO_Pose(Node):
                     self.get_logger().info('BOTH HANDS ABOVE - Moving to position 1')
                     self._moving = True
                     self.call_set_tool_async(0.0, 0.2, 0.1, 180.0, 0.0, 180.0)
-                elif left_above and not right_above and not left_below and not right_below:
+                elif left_above:
                     self.get_logger().info('LEFT HAND ABOVE - Moving to position 2')
                     self._moving = True
                     self.call_set_tool_async(0.1, 0.2, 0.1, 180.0, 0.0, 180.0)
                     
-                elif right_above and not left_above and not left_below and not right_below:
+                elif right_above:
                     self.get_logger().info('RIGHT HAND ABOVE - Moving to position 4')
                     self._moving = True
                     self.call_set_tool_async(0.0, 0.1, 0.1, 180.0, 0.0, 180.0)
   
-                elif left_below and not right_below and not left_above and not right_above:
+                elif left_below:
                     self.get_logger().info('LEFT HAND BELOW - Moving to position 3')
                     self._moving = True
                     self.call_set_tool_async(-0.1, 0.2, 0.1, 180.0, 0.0, 180.0)
                   
-                elif right_below and not left_below and not left_above and not right_above:
+                elif right_below:
                     self.get_logger().info('RIGHT HAND BELOW - Moving to position 5')
                     self._moving = True
                     self.call_set_tool_async(0.0, 0.3, 0.1, 180.0, 0.0, 180.0)
