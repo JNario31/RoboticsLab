@@ -131,7 +131,8 @@ class YOLO_Pose(Node):
             right_below = right_wrist_y > (right_shoulder_y + dy_ref)
 
             self.get_logger().info(f'{self.get_name()}  Left Above: {left_above}, Left Below: {left_below}, Right Above: {right_above}, Right Below: {right_below}')
-           
+
+            self.call_home()
             if not self._moving:
                 if left_above and right_above:
                     self.get_logger().info('BOTH HANDS ABOVE - Moving to home position')
