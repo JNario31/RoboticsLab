@@ -26,8 +26,6 @@ setup(
         'console_scripts': [
             'yolo_pose = cpmr_ch12.yolo_pose:main',
             'opencv_camera = cpmr_ch12.opencv_camera:main',
-            'kinova_gen3_tester = cpmr_ch12.kinova_gen3_tester:main',
-            'kinova_gen3_node = cpmr_ch12.kinova_gen3_node:main',
         ],
     },
 )

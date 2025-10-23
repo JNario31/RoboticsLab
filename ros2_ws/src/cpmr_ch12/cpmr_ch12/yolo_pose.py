@@ -1,6 +1,5 @@
 import os
 import sys
-from tokenize import String
 import rclpy
 import cv2
 import datetime
@@ -8,8 +7,7 @@ import numpy as np
 import pandas as pd
 import math
 import threading
-from std_msgs.msg import String
-import json
+
 from rclpy.node import Node
 from ultralytics import YOLO
 from cv_bridge import CvBridge
@@ -27,6 +25,147 @@ from kortex_api.autogen.client_stubs.BaseCyclicClientRpc import BaseCyclicClient
 from kortex_api.autogen.messages import Base_pb2, BaseCyclic_pb2, Common_pb2
 
 from cpmr_ch12.utilities import parseConnectionArguments, DeviceConnection
+
+
+# Maximum allowed waiting time during actions (in seconds)
+TIMEOUT_DURATION = 20
+
+# Create closure to set an event after an END or an ABORT
+def check_for_end_or_abort(e):
+    """Return a closure checking for END or ABORT notifications
+
+    Arguments:
+    e -- event to signal when the action is completed
+        (will be set when an END or ABORT occurs)
+    """
+    def check(notification, e = e):
+        print("EVENT : " + \
+              Base_pb2.ActionEvent.Name(notification.action_event))
+        if notification.action_event == Base_pb2.ACTION_END \
+        or notification.action_event == Base_pb2.ACTION_ABORT:
+            e.set()
+    return check
+
+
+def example_angular_action_movement(base, angles=[0.0, 0.0, 0.0, 0.0, 0.0, 0.0]):
+
+    print("Starting angular action movement ...")
+    action = Base_pb2.Action()
+    action.name = "Example angular action movement"
+    action.application_data = ""
+
+    actuator_count = base.GetActuatorCount()
+
+    # Place arm straight up
+    print(actuator_count.count)
+    if actuator_count.count != len(angles):
+        print(f"bad lengths {actuator_count.count} {len(angles)}")
+    for joint_id in range(actuator_count.count):
+        joint_angle = action.reach_joint_angles.joint_angles.joint_angles.add()
+        joint_angle.joint_identifier = joint_id
+        joint_angle.value = angles[joint_id]
+
+    e = threading.Event()
+    notification_handle = base.OnNotificationActionTopic(
+        check_for_end_or_abort(e),
+        Base_pb2.NotificationOptions()
+    )
+
+    print("Executing action")
+    base.ExecuteAction(action)
+
+    print("Waiting for movement to finish ...")
+    finished = e.wait(TIMEOUT_DURATION)
+    base.Unsubscribe(notification_handle)
+
+    if finished:
+        print("Angular movement completed")
+    else:
+        print("Timeout on action notification wait")
+    return finished
+
+def example_move_to_home_position(base):
+    # Make sure the arm is in Single Level Servoing mode
+    base_servo_mode = Base_pb2.ServoingModeInformation()
+    base_servo_mode.servoing_mode = Base_pb2.SINGLE_LEVEL_SERVOING
+    base.SetServoingMode(base_servo_mode)
+
+    # Move arm to ready position
+    print("Moving the arm to a safe position")
+    action_type = Base_pb2.RequestedActionType()
+    action_type.action_type = Base_pb2.REACH_JOINT_ANGLES
+    action_list = base.ReadAllActions(action_type)
+    action_handle = None
+    for action in action_list.action_list:
+        if action.name == "Home":
+            action_handle = action.handle
+
+    if action_handle == None:
+        print("Can't reach safe position. Exiting")
+        return False
+
+    e = threading.Event()
+    notification_handle = base.OnNotificationActionTopic(
+        check_for_end_or_abort(e),
+        Base_pb2.NotificationOptions()
+    )
+
+    base.ExecuteActionFromReference(action_handle)
+    finished = e.wait(TIMEOUT_DURATION)
+    base.Unsubscribe(notification_handle)
+
+    if finished:
+        print("Safe position reached")
+    else:
+        print("Timeout on action notification wait")
+    return finished
+
+
+def get_angular_state(base_cyclic):
+    feedback = base_cyclic.RefreshFeedback()
+    actuators = feedback.actuators
+    v = []
+    for j in actuators:
+        v.append(j.position)
+    return v
+
+def example_cartesian_action_movement(base, x, y, z, theta_x, theta_y, theta_z):
+
+    print("Starting Cartesian action movement ...")
+    action = Base_pb2.Action()
+    action.name = "Example Cartesian action movement"
+    action.application_data = ""
+
+    cartesian_pose = action.reach_pose.target_pose
+    cartesian_pose.x = x
+    cartesian_pose.y = y
+    cartesian_pose.z = z
+    cartesian_pose.theta_x = theta_x
+    cartesian_pose.theta_y = theta_y
+    cartesian_pose.theta_z = theta_z
+
+    e = threading.Event()
+    notification_handle = base.OnNotificationActionTopic(
+        check_for_end_or_abort(e),
+        Base_pb2.NotificationOptions()
+    )
+
+    print("Executing action")
+    base.ExecuteAction(action)
+
+    print("Waiting for movement to finish ...")
+    finished = e.wait(TIMEOUT_DURATION)
+    base.Unsubscribe(notification_handle)
+
+    return finished
+
+def get_tool_state(base_cyclic):
+    feedback = base_cyclic.RefreshFeedback()
+    base = feedback.base
+
+    return  base.tool_pose_x, base.tool_pose_y, base.tool_pose_z, base.tool_pose_theta_x, base.tool_pose_theta_y, base.tool_pose_theta_z
+
+
 
 class YOLO_Pose(Node):
     _BODY_PARTS = ["NOSE", "LEFT_EYE", "RIGHT_EYE", "LEFT_EAR", "RIGHT_EAR", "LEFT_SHOULDER", "RIGHT_SHOULDER",
@@ -56,12 +195,29 @@ class YOLO_Pose(Node):
         self._model = YOLO(model)
         self._model.fuse()
 
-        # publisher
-        self._keypoint_pub = self.create_publisher(String, '/pose_keypoints', 10)
-
         # subs
         self._sub = self.create_subscription(Image, self._camera_topic, self._camera_callback, 1) 
 
+        # Create the Kinova Gen3 interface object
+        self.create_service(Status, "home", self._handle_home)
+        self.create_service(GetGripper, "get_gripper", self._handle_get_gripper)
+        self.create_service(SetGripper, "set_gripper", self._handle_set_gripper)
+        self.create_service(SetJoints, "set_joints", self._handle_set_joints)
+        self.create_service(GetJoints, "get_joints", self._handle_get_joints)
+        self.create_service(SetTool, "set_tool", self._handle_set_tool)
+        self.create_service(GetTool, "get_tool", self._handle_get_tool)
+
+        args = parseConnectionArguments()
+        with DeviceConnection.createTcpConnection(args) as router:
+            self._router = router
+            self._base = BaseClient(self._router)
+            self._base_cyclic = BaseCyclicClient(self._router)
+
+        if example_move_to_home_position(self._base):
+           self.get_logger().info('Robot initialized successfully')
+        else:
+           self.get_logger().error('Failed to initialize robot position')
+        
     def parse_keypoints(self, results: Results):
 
         keypoints_list = []
@@ -77,7 +233,7 @@ class YOLO_Pose(Node):
         return keypoints_list
     
     def _camera_callback(self, data):
-        #self.get_logger().info(f'{self.get_name()} camera callback')
+        self.get_logger().info(f'{self.get_name()} camera callback')
         img = self._bridge.imgmsg_to_cv2(data)
         results = self._model.predict(
                 source = img,
@@ -109,41 +265,51 @@ class YOLO_Pose(Node):
                 cv2.imshow('Results', annotated_frame)
                 cv2.waitKey(1)
 
-        key_dict = {YOLO_Pose._BODY_PARTS[k[0]]: k for k in keypoints}
-         # === NEW CODE: Check if needed keypoints exist ===
-        required = ["LEFT_EYE", "RIGHT_EYE", "LEFT_SHOULDER", "RIGHT_SHOULDER", "LEFT_WRIST", "RIGHT_WRIST"]
-        if not all(k in key_dict for k in required):
-            return
+    # Kinova functions
+    def _handle_home(self, request, response):
+        """Move to home"""
+        self.get_logger().info(f'{self.get_name()} moving to home')
 
-        left_eye_y = key_dict["LEFT_EYE"][2]
-        right_eye_y = key_dict["RIGHT_EYE"][2]
-        left_shoulder_y = key_dict["LEFT_SHOULDER"][2]
-        right_shoulder_y = key_dict["RIGHT_SHOULDER"][2]
-        left_wrist_y = key_dict["LEFT_WRIST"][2]
-        right_wrist_y = key_dict["RIGHT_WRIST"][2]
+        response.status = example_move_to_home_position(self._base)
+        return response
 
-        dy_ref = abs((left_eye_y + right_eye_y)/2 - (left_shoulder_y + right_shoulder_y)/2)
+    def _handle_set_joints(self, request, response):
+        """Set joint values"""
+        self.get_logger().info(f'{self.get_name()} Setting joint values')
+        if len(request.joints) != 6:
+            self.get_logger().info(f'{self.get_name()} Must specify exactly six joint angles')
+            response.status = False
+            return response
 
-        left_above = left_wrist_y < (left_shoulder_y - dy_ref)
-        left_below = left_wrist_y > (left_shoulder_y + dy_ref)
-        right_above = right_wrist_y < (right_shoulder_y - dy_ref)
-        right_below = right_wrist_y > (right_shoulder_y + dy_ref)
+        response.status = example_angular_action_movement(self._base, angles=request.joints)
+        return response
+    
+    def _handle_get_joints(self, request, response):
+        """Get joint values"""
+        self.get_logger().info(f'{self.get_name()} Getting joint values')
+        response.joints = get_angular_state(self._base_cyclic)
+        return response
 
-        pose_flags = {
-            "left_above": left_above,
-            "left_below": left_below,
-            "right_above": right_above,
-            "right_below": right_below
-        }
 
-        # Convert to JSON string
-        msg = String()
-        msg.data = json.dumps(pose_flags)
+    def _handle_set_tool(self, request, response):
+        """Set tool values"""
+        self.get_logger().info(f'{self.get_name()} Setting tool values')
 
-        # Publish
-        self._keypoint_pub.publish(msg)
-        self.get_logger().info(f"Published flags: {pose_flags}")
-        
+        response.status = example_cartesian_action_movement(self._base, request.x, request.y, request.z, request.theta_x, request.theta_y, request.theta_z)
+        return response
+
+    def _handle_get_tool(self, request, response):
+        """Get tool values"""
+        self.get_logger().info(f'{self.get_name()} Getting tool values')
+        x, y, z, theta_x, theta_y, theta_z = get_tool_state(self._base_cyclic)
+        response.x = x
+        response.y = y
+        response.z = z
+        response.theta_x = theta_x
+        response.theta_y = theta_y
+        response.theta_z = theta_z
+        return response
+
 
 def main(args=None):
     rclpy.init(args=args)
