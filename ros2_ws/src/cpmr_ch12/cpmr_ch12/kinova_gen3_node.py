@@ -16,7 +16,7 @@ from kortex_api.autogen.client_stubs.BaseClientRpc import BaseClient
 from kortex_api.autogen.client_stubs.BaseCyclicClientRpc import BaseCyclicClient
 from kortex_api.autogen.messages import Base_pb2, BaseCyclic_pb2, Common_pb2
 
-from kinova_gen3.utilities import parseConnectionArguments, DeviceConnection
+from cpmr_ch12.utilities import parseConnectionArguments, DeviceConnection
 
 # Maximum allowed waiting time during actions (in seconds)
 TIMEOUT_DURATION = 20
