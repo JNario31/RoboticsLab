@@ -63,7 +63,7 @@ def reset():
 def state_to_row_col(s):
      return [int(s / 7), s % 7]
 
-def q_learning(maze, actions, n_episodes=500, max_episode_length=100, epsilon=0.02, alpha=0.2, gamma=0.7):
+def q_learning(maze, actions, n_episodes=500, max_episode_length=100, epsilon=0.04, alpha=0.2, gamma=0.7):
     rewards = []
 
     Q = init_Q()
