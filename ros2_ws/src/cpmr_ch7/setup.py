@@ -25,6 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
         'build_map = cpmr_ch7.build_map:main',
+        'q_learning = cpmr_ch7.q:main',
         ],
     },
 )
